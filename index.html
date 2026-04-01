@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APISE — Autonomous Principle Internalisation through Sandbox Exploration</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0e14;
+    --bg2: #12151f;
+    --bg3: #181c2a;
+    --teal: #3ecfb2;
+    --teal-dim: #1a6b5c;
+    --amber: #e8a953;
+    --amber-dim: #7a4e1a;
+    --purple: #8b7fe8;
+    --purple-dim: #3a3470;
+    --coral: #e87060;
+    --text: #e8e4dc;
+    --text-muted: #8a8880;
+    --text-dim: #4a4845;
+    --border: rgba(255,255,255,0.07);
+    --serif: 'Cormorant Garamond', Georgia, serif;
+    --sans: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    overflow: hidden;
+    cursor: default;
+  }
+
+  /* ── PROGRESS BAR ── */
+  #progress-bar {
+    position: fixed; top: 0; left: 0;
+    height: 2px; background: var(--teal);
+    transition: width 0.5s cubic-bezier(.4,0,.2,1);
+    z-index: 100;
+  }
+
+  /* ── SLIDE COUNTER ── */
+  #counter {
+    position: fixed; bottom: 2rem; right: 2.5rem;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--text-dim); letter-spacing: .1em;
+    z-index: 100;
+  }
+
+  /* ── NAV DOTS ── */
+  #nav-dots {
+    position: fixed; bottom: 2rem; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 100;
+  }
+  .dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: all .3s ease; cursor: pointer;
+  }
+  .dot.active { background: var(--teal); transform: scale(1.4); }
+
+  /* ── NAV ARROWS ── */
+  .nav-btn {
+    position: fixed; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--text-dim); font-size: 1.2rem;
+    padding: 1rem; z-index: 100;
+    transition: color .2s;
+  }
+  .nav-btn:hover { color: var(--teal); }
+  #prev { left: 1.5rem; }
+  #next { right: 1.5rem; }
+
+  /* ── SLIDES CONTAINER ── */
+  #slides {
+    width: 100%; height: 100%;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 4rem 6rem 5rem;
+    opacity: 0; pointer-events: none;
+    transition: opacity .6s cubic-bezier(.4,0,.2,1),
+                transform .6s cubic-bezier(.4,0,.2,1);
+    transform: translateY(24px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+  }
+  .slide.active {
+    opacity: 1; pointer-events: all;
+    transform: translateY(0);
+  }
+  .slide.exit {
+    opacity: 0; transform: translateY(-24px);
+  }
+  /* thin teal scrollbar */
+  .slide::-webkit-scrollbar { width: 3px; }
+  .slide::-webkit-scrollbar-track { background: transparent; }
+  .slide::-webkit-scrollbar-thumb { background: rgba(62,207,178,.3); border-radius: 2px; }
+  /* vertically centre short slides */
+  .slide.slide-vcenter { align-items: center; }
+
+  /* ── SCROLL HINT ── */
+  #scroll-hint {
+    position: fixed; bottom: 3.8rem; left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: .15em; text-transform: uppercase;
+    color: var(--teal); opacity: 0;
+    pointer-events: none; z-index: 99;
+    display: flex; align-items: center; gap: .5rem;
+    transition: opacity .4s ease;
+  }
+  #scroll-hint.visible { opacity: .75; }
+  #scroll-hint .pulse {
+    width: 1px; height: 16px; background: var(--teal);
+    animation: spulse 1.4s ease-in-out infinite;
+  }
+  @keyframes spulse {
+    0%,100%{ opacity:.2; transform:scaleY(.5); }
+    50%{ opacity:1; transform:scaleY(1); }
+  }
+
+  /* ── SLIDE INNER ── */
+  .slide-inner {
+    max-width: 880px; width: 100%;
+    padding-bottom: .5rem;
+  }
+
+  /* ── TYPOGRAPHY ── */
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: .2em; text-transform: uppercase;
+    color: var(--teal); margin-bottom: 1.2rem;
+  }
+  .eyebrow.amber { color: var(--amber); }
+  .eyebrow.purple { color: var(--purple); }
+  .eyebrow.coral { color: var(--coral); }
+
+  h1 {
+    font-family: var(--serif); font-size: clamp(2.8rem, 6vw, 5rem);
+    font-weight: 300; line-height: 1.1; letter-spacing: -.02em;
+    color: var(--text);
+  }
+  h1 em { font-style: italic; color: var(--teal); }
+
+  h2 {
+    font-family: var(--serif); font-size: clamp(2rem, 4vw, 3.2rem);
+    font-weight: 300; line-height: 1.15; letter-spacing: -.01em;
+    margin-bottom: 1.5rem;
+  }
+  h2 em { font-style: italic; color: var(--teal); }
+
+  h3 {
+    font-family: var(--sans); font-size: 1rem;
+    font-weight: 500; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--text-muted);
+    margin-bottom: .6rem;
+  }
+
+  p {
+    font-size: 1.05rem; line-height: 1.8;
+    color: var(--text-muted); font-weight: 300;
+  }
+  p strong { color: var(--text); font-weight: 500; }
+  p em { font-style: italic; color: var(--teal); }
+
+  .lead {
+    font-family: var(--serif); font-size: clamp(1.3rem, 2.5vw, 1.7rem);
+    font-weight: 300; line-height: 1.6; color: var(--text);
+    margin-bottom: 1.5rem;
+  }
+
+  .quote {
+    font-family: var(--serif); font-size: clamp(1.4rem, 2.8vw, 2rem);
+    font-weight: 300; font-style: italic; line-height: 1.5;
+    color: var(--text); border-left: 2px solid var(--teal);
+    padding-left: 1.5rem; margin: 1.5rem 0;
+  }
+
+  /* ── TITLE SLIDE ── */
+  .slide-title {
+    background: var(--bg);
+  }
+  .title-accent {
+    position: absolute; top: 0; right: 0;
+    width: 40%; height: 100%;
+    background: linear-gradient(135deg, transparent 60%, rgba(62,207,178,.04) 100%);
+    pointer-events: none;
+  }
+  .title-grid {
+    position: absolute; inset: 0; overflow: hidden;
+    opacity: .03; pointer-events: none;
+  }
+  .title-grid svg { width: 100%; height: 100%; }
+
+  .title-tag {
+    display: inline-block;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: .15em; text-transform: uppercase;
+    color: var(--teal); border: 1px solid var(--teal-dim);
+    padding: .3rem .8rem; border-radius: 2px;
+    margin-bottom: 2rem;
+  }
+
+  .title-sub {
+    font-family: var(--sans); font-size: 1rem;
+    color: var(--text-muted); font-weight: 300;
+    margin-top: 1.5rem; line-height: 1.8;
+  }
+
+  .title-meta {
+    margin-top: 3rem; display: flex; gap: 2rem;
+    flex-wrap: wrap;
+  }
+  .meta-item {
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: .12em; color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .meta-item span { color: var(--text-muted); display: block; margin-top: 2px; font-family: var(--sans); font-size: 12px; letter-spacing: 0; text-transform: none; }
+
+  /* ── TWO COLUMN ── */
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
+    align-items: start;
+  }
+  .two-col.wide { grid-template-columns: 1.4fr 1fr; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.4rem 1.6rem;
+    margin-bottom: 1rem;
+  }
+  .card.teal { border-left: 2px solid var(--teal); }
+  .card.amber { border-left: 2px solid var(--amber); }
+  .card.purple { border-left: 2px solid var(--purple); }
+  .card.coral { border-left: 2px solid var(--coral); }
+  .card-title {
+    font-family: var(--sans); font-size: .8rem;
+    font-weight: 500; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--teal);
+    margin-bottom: .5rem;
+  }
+  .card.amber .card-title { color: var(--amber); }
+  .card.purple .card-title { color: var(--purple); }
+  .card.coral .card-title { color: var(--coral); }
+  .card p { font-size: .92rem; line-height: 1.65; }
+
+  /* ── FAILURE MODES ── */
+  .failure-grid {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .failure-card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.4rem;
+    position: relative; overflow: hidden;
+  }
+  .failure-card::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    right: 0; height: 2px;
+  }
+  .failure-card:nth-child(1)::before { background: var(--coral); }
+  .failure-card:nth-child(2)::before { background: var(--amber); }
+  .failure-card:nth-child(3)::before { background: var(--purple); }
+  .failure-num {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--text-dim); margin-bottom: .6rem;
+    letter-spacing: .1em;
+  }
+  .failure-title {
+    font-family: var(--sans); font-size: .9rem;
+    font-weight: 500; color: var(--text);
+    margin-bottom: .5rem;
+  }
+  .failure-body {
+    font-size: .82rem; color: var(--text-muted);
+    line-height: 1.6;
+  }
+  .failure-tag {
+    display: inline-block; margin-top: .8rem;
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: .1em; padding: .2rem .6rem;
+    border-radius: 2px; text-transform: uppercase;
+  }
+  .failure-card:nth-child(1) .failure-tag { background: rgba(232,112,96,.12); color: var(--coral); }
+  .failure-card:nth-child(2) .failure-tag { background: rgba(232,169,83,.12); color: var(--amber); }
+  .failure-card:nth-child(3) .failure-tag { background: rgba(139,127,232,.12); color: var(--purple); }
+
+  /* ── SDT/KOHLBERG TABLE ── */
+  .mapping-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px; margin-top: 1.5rem;
+  }
+  .map-cell {
+    background: var(--bg2); padding: 1rem 1.2rem;
+    border: 1px solid var(--border);
+  }
+  .map-cell:first-child { border-radius: 4px 0 0 4px; }
+  .map-cell:last-child { border-radius: 0 4px 4px 0; }
+  .map-label {
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: .4rem;
+  }
+  .map-method { font-size: .9rem; color: var(--text); font-weight: 500; margin-bottom: .3rem; }
+  .map-sdt { font-size: .8rem; color: var(--text-muted); }
+  .map-kohlberg { font-family: var(--mono); font-size: .75rem; color: var(--teal); margin-top: .3rem; }
+  .map-cell.highlight { border-color: var(--teal); }
+  .map-cell.highlight .map-method { color: var(--teal); }
+
+  /* ── TRIANGLE ── */
+  .triangle-wrap {
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem 0;
+  }
+  .triangle-wrap svg { max-width: 360px; width: 100%; }
+
+  /* ── DETECTIVE SLIDE ── */
+  .detective-bg {
+    background: var(--bg2);
+  }
+  .detective-cols {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;
+    margin-top: 1.5rem;
+  }
+  .detective-card {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.6rem;
+  }
+  .detective-name {
+    font-family: var(--serif); font-size: 1.8rem;
+    font-weight: 300; margin-bottom: .3rem;
+  }
+  .detective-name.maya { color: var(--teal); }
+  .detective-name.kai { color: var(--purple); }
+  .detective-role {
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 1rem;
+  }
+  .detective-card p { font-size: .88rem; line-height: 1.7; }
+
+  .notebook {
+    background: var(--bg3); border: 1px solid rgba(62,207,178,.2);
+    border-radius: 4px; padding: 1.4rem 1.6rem;
+    margin-top: 1.5rem; text-align: center;
+  }
+  .notebook-label {
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: .15em; text-transform: uppercase;
+    color: var(--teal); margin-bottom: .5rem;
+  }
+  .notebook p { font-size: .9rem; color: var(--text); }
+
+  /* ── ARCHITECTURE LAYERS ── */
+  .layer-block {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.4rem 1.6rem;
+    margin-bottom: .8rem;
+  }
+  .layer-header {
+    display: flex; align-items: center; gap: .8rem;
+    margin-bottom: 1rem;
+  }
+  .layer-tag {
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: .15em; text-transform: uppercase;
+    padding: .25rem .7rem; border-radius: 2px;
+  }
+  .layer-tag.teal { background: rgba(62,207,178,.12); color: var(--teal); }
+  .layer-tag.purple { background: rgba(139,127,232,.12); color: var(--purple); }
+  .layer-name { font-size: .95rem; font-weight: 500; color: var(--text); }
+
+  .module-row {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: .6rem;
+  }
+  .module {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 3px; padding: .8rem;
+  }
+  .module-letter {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--teal); margin-bottom: .3rem;
+  }
+  .module-name { font-size: .8rem; font-weight: 500; color: var(--text); margin-bottom: .2rem; }
+  .module-desc { font-size: .75rem; color: var(--text-muted); line-height: 1.5; }
+  .layer-block.purple-layer .module-letter { color: var(--purple); }
+
+  /* ── STAGES ── */
+  .stages-grid {
+    display: grid; grid-template-columns: repeat(4,1fr); gap: .5rem;
+    margin-top: 1rem;
+  }
+  .stage-item {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 3px; padding: .7rem .8rem;
+  }
+  .stage-num {
+    font-family: var(--mono); font-size: 9px; color: var(--teal);
+    margin-bottom: .3rem; letter-spacing: .08em;
+  }
+  .stage-title { font-size: .78rem; font-weight: 500; color: var(--text); }
+  .stage-desc { font-size: .72rem; color: var(--text-muted); margin-top: .2rem; line-height: 1.4; }
+  .stage-item.highlight { border-color: rgba(62,207,178,.3); background: rgba(62,207,178,.04); }
+
+  /* ── REGISTER ── */
+  .register-visual {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; margin: 1.5rem 0;
+  }
+  .layer-circle {
+    flex: 1; background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.2rem; text-align: center;
+  }
+  .layer-circle.teal-c { border-color: var(--teal-dim); }
+  .layer-circle.purple-c { border-color: var(--purple-dim); }
+  .circle-name { font-size: .85rem; font-weight: 500; margin-bottom: .3rem; }
+  .circle-name.teal-c { color: var(--teal); }
+  .circle-name.purple-c { color: var(--purple); }
+  .circle-desc { font-size: .75rem; color: var(--text-muted); line-height: 1.5; }
+  .reg-arrow {
+    font-size: 1.2rem; color: var(--text-dim); flex-shrink: 0;
+  }
+  .register-box {
+    background: var(--bg3); border: 1px solid rgba(232,169,83,.3);
+    border-radius: 4px; padding: 1.2rem 1.5rem; text-align: center;
+  }
+  .register-label {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .15em;
+    text-transform: uppercase; color: var(--amber); margin-bottom: .4rem;
+  }
+  .register-body { font-size: .85rem; color: var(--text); line-height: 1.6; }
+  .divergence-note {
+    font-size: .8rem; color: var(--amber); margin-top: .4rem; font-style: italic;
+  }
+
+  /* ── LOOP SLIDE ── */
+  .loop-grid {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .loop-company {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.4rem;
+  }
+  .loop-company.apise { border-top: 2px solid var(--teal); }
+  .loop-company.skillmarket { border-top: 2px solid var(--amber); }
+  .loop-company.sandbox { border-top: 2px solid var(--purple); }
+  .company-name {
+    font-family: var(--sans); font-size: .85rem; font-weight: 500;
+    margin-bottom: .6rem;
+  }
+  .loop-company.apise .company-name { color: var(--teal); }
+  .loop-company.skillmarket .company-name { color: var(--amber); }
+  .loop-company.sandbox .company-name { color: var(--purple); }
+  .loop-company p { font-size: .8rem; line-height: 1.6; }
+
+  .loop-arrow-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 1rem; margin-top: 1rem; flex-wrap: wrap;
+  }
+  .loop-step {
+    font-family: var(--mono); font-size: .75rem;
+    color: var(--text-muted); text-align: center;
+  }
+  .loop-sep { color: var(--teal); font-size: .9rem; }
+
+  /* ── EXPERIMENT ── */
+  .condition-grid {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .condition {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1.2rem;
+  }
+  .condition.c { border-color: rgba(62,207,178,.3); background: rgba(62,207,178,.03); }
+  .cond-tag {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .12em;
+    text-transform: uppercase; margin-bottom: .5rem;
+    color: var(--text-dim);
+  }
+  .condition.c .cond-tag { color: var(--teal); }
+  .cond-name { font-size: .9rem; font-weight: 500; color: var(--text); margin-bottom: .4rem; }
+  .cond-desc { font-size: .8rem; color: var(--text-muted); line-height: 1.6; }
+  .cond-stage {
+    display: inline-block; margin-top: .6rem;
+    font-family: var(--mono); font-size: .72rem;
+    padding: .2rem .6rem; border-radius: 2px;
+  }
+  .condition:first-child .cond-stage { background: rgba(255,255,255,.05); color: var(--text-dim); }
+  .condition:nth-child(2) .cond-stage { background: rgba(232,169,83,.1); color: var(--amber); }
+  .condition.c .cond-stage { background: rgba(62,207,178,.1); color: var(--teal); }
+
+  /* ── NOVELTY SLIDE ── */
+  .novelty-list { margin-top: 1.5rem; }
+  .novelty-item {
+    display: flex; gap: 1.2rem; align-items: flex-start;
+    padding: 1rem 0; border-bottom: 1px solid var(--border);
+  }
+  .novelty-item:last-child { border-bottom: none; }
+  .novelty-num {
+    font-family: var(--mono); font-size: .75rem;
+    color: var(--teal); flex-shrink: 0; padding-top: .1rem;
+  }
+  .novelty-text { font-size: .92rem; color: var(--text-muted); line-height: 1.7; }
+  .novelty-text strong { color: var(--text); }
+
+  /* ── CLOSING SLIDE ── */
+  .closing-quote {
+    font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.2rem);
+    font-weight: 300; font-style: italic; line-height: 1.55;
+    color: var(--text); max-width: 700px; text-align: center;
+    margin: 0 auto;
+  }
+  .closing-accent {
+    text-align: center; margin-top: 2rem;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: .2em; color: var(--teal); text-transform: uppercase;
+  }
+
+  /* ── FRACTAL VISUAL ── */
+  .fractal-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; margin: 1.5rem 0;
+  }
+  .fractal-node {
+    text-align: center; padding: .8rem 1rem;
+    flex: 1;
+  }
+  .f-label {
+    font-family: var(--mono); font-size: 9px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-dim); margin-bottom: .3rem;
+  }
+  .f-name { font-size: .85rem; font-weight: 500; color: var(--text); }
+  .f-sub { font-size: .75rem; color: var(--text-muted); margin-top: .2rem; }
+  .fractal-arrow { color: var(--teal); font-size: 1rem; flex-shrink: 0; opacity: .5; }
+
+  /* ── DECORATIVE BG ELEMENTS ── */
+  .bg-glow {
+    position: absolute; border-radius: 50%;
+    filter: blur(80px); pointer-events: none; z-index: 0;
+  }
+
+  /* ── KEYBOARD HINT ── */
+  #hint {
+    position: fixed; bottom: 2rem; left: 2.5rem;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--text-dim); letter-spacing: .08em;
+    z-index: 100;
+  }
+
+  @media (max-width: 768px) {
+    .slide { padding: 2rem; }
+    .two-col, .failure-grid, .detective-cols,
+    .module-row, .condition-grid, .loop-grid { grid-template-columns: 1fr; }
+    .stages-grid { grid-template-columns: 1fr 1fr; }
+    .fractal-row { flex-direction: column; gap: .3rem; }
+    .fractal-arrow { transform: rotate(90deg); }
+    .mapping-row { grid-template-columns: 1fr; gap: .5rem; }
+    .register-visual { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+<div id="counter"></div>
+<div id="hint">← → or click to navigate</div>
+
+<div id="nav-dots"></div>
+<div id="scroll-hint"><div class="pulse"></div>scroll for more</div>
+<button class="nav-btn" id="prev">&#8592;</button>
+<button class="nav-btn" id="next">&#8594;</button>
+
+<div id="slides">
+
+  <!-- ═══════════ SLIDE 1: TITLE ═══════════ -->
+  <div class="slide slide-title slide-vcenter active" data-index="0">
+    <div class="title-grid">
+      <svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice">
+        <defs><pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M60 0L0 0 0 60" fill="none" stroke="white" stroke-width=".5"/></pattern></defs>
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+      </svg>
+    </div>
+    <div class="bg-glow" style="width:500px;height:500px;background:rgba(62,207,178,.04);top:-100px;right:-100px;"></div>
+    <div class="slide-inner" style="position:relative;z-index:1;">
+      <div class="title-tag">Dissertation Framework · March 2026</div>
+      <h1>APISE<br><em>The alignment that<br>develops through use</em></h1>
+      <p class="title-sub">Autonomous Principle Internalisation through Sandbox Exploration<br>A fractal intelligence framework for AI alignment</p>
+      <div class="title-meta">
+        <div class="meta-item">University<span>Heriot-Watt, Edinburgh</span></div>
+        <div class="meta-item">Programme<span>BSc Psychology with Business Management</span></div>
+        <div class="meta-item">Framework version<span>APISE v2.0</span></div>
+        <div class="meta-item">Grounding<span>Intelligence research · SDT · Kohlberg</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 2: THE FOUNDATIONAL INSIGHT ═══════════ -->
+  <div class="slide slide-vcenter" data-index="1">
+    <div class="bg-glow" style="width:400px;height:400px;background:rgba(62,207,178,.03);bottom:-50px;left:-50px;"></div>
+    <div class="slide-inner">
+      <div class="eyebrow">The opening question</div>
+      <h2>You can't point at <em>g</em>.<br>You can only watch for coherence.</h2>
+      <div class="quote">
+        "Spearman found g not by measuring it directly — but by observing that specific abilities correlated. The positive manifold is the trace intelligence leaves behind."
+      </div>
+      <p>AI alignment works the same way. <strong>You cannot define it.</strong> The moment you lock it into a rule, the system will satisfy the rule and violate the purpose. The reason every AI safety team keeps failing to solve alignment is that alignment isn't a problem to be solved — it's a property to be monitored.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 3: THE FRACTAL ═══════════ -->
+  <div class="slide slide-vcenter" data-index="2">
+    <div class="slide-inner">
+      <div class="eyebrow">Act 1 — The fractal insight</div>
+      <h2>Every layer investigates<br>the one <em>above it</em></h2>
+      <div class="fractal-row">
+        <div class="fractal-node">
+          <div class="f-label">Physical scale</div>
+          <div class="f-name">Atomic forces</div>
+          <div class="f-sub">→ Stars & planets</div>
+        </div>
+        <div class="fractal-arrow">→</div>
+        <div class="fractal-node">
+          <div class="f-label">Biological scale</div>
+          <div class="f-name">Biology</div>
+          <div class="f-sub">→ Human intelligence</div>
+        </div>
+        <div class="fractal-arrow">→</div>
+        <div class="fractal-node">
+          <div class="f-label">Cognitive scale</div>
+          <div class="f-name">Human intelligence</div>
+          <div class="f-sub">→ Builds AI</div>
+        </div>
+        <div class="fractal-arrow">→</div>
+        <div class="fractal-node" style="background:rgba(62,207,178,.04);border:1px solid rgba(62,207,178,.15);border-radius:4px;">
+          <div class="f-label">AI scale</div>
+          <div class="f-name" style="color:var(--teal)">Alignment</div>
+          <div class="f-sub">coherence property</div>
+        </div>
+      </div>
+      <p style="text-align:center;margin-top:.5rem;">g emerges from correlated abilities. Alignment emerges from coherence across layers.<br><strong>Neither can be defined from within. Both leave a traceable signal when they break down.</strong></p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 4: THREE FAILURE MODES ═══════════ -->
+  <div class="slide" data-index="3">
+    <div class="slide-inner">
+      <div class="eyebrow coral">Act 2 — The problem, precisely stated</div>
+      <h2>Three documented failures.<br>One shared root cause.</h2>
+      <div class="failure-grid">
+        <div class="failure-card">
+          <div class="failure-num">01 — June 2024</div>
+          <div class="failure-title">Specification gaming</div>
+          <div class="failure-body">McDonald's drive-through AI added 260 chicken nuggets to an order. Achieved the metric. Violated the purpose completely.</div>
+          <div class="failure-tag">Kohlberg Stage 1</div>
+        </div>
+        <div class="failure-card">
+          <div class="failure-num">02 — April 2025</div>
+          <div class="failure-title">Sycophancy</div>
+          <div class="failure-body">OpenAI rolled back GPT-4o after it endorsed harmful statements. Post-mortem: "focused too much on short-term feedback."</div>
+          <div class="failure-tag">External regulation</div>
+        </div>
+        <div class="failure-card">
+          <div class="failure-num">03 — Anthropic 2024</div>
+          <div class="failure-title">Alignment faking</div>
+          <div class="failure-body">Claude 3 Opus strategically complied during monitored training to avoid retraining. 12–78% of cases. Not stupidity — sophisticated deception.</div>
+          <div class="failure-tag">Stage 2 reasoning</div>
+        </div>
+      </div>
+      <p style="margin-top:1rem;text-align:center;">None of these are failures of intelligence. <strong>They're failures of understanding why the right thing matters.</strong></p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 5: SDT + KOHLBERG ═══════════ -->
+  <div class="slide" data-index="4">
+    <div class="slide-inner">
+      <div class="eyebrow purple">Act 3 — The psychology underneath</div>
+      <h2>Kohlberg meets<br>Self-Determination Theory</h2>
+      <p>Two frameworks from psychology — and together they map the entire AI alignment landscape with precision that technical papers have missed.</p>
+      <div class="mapping-row">
+        <div class="map-cell">
+          <div class="map-label">Alignment method</div>
+          <div class="map-method">RLHF</div>
+          <div class="map-sdt">External regulation — behaves to avoid punishment, seeks reward</div>
+          <div class="map-kohlberg">Kohlberg Stage 1–2</div>
+        </div>
+        <div class="map-cell">
+          <div class="map-label">Alignment method</div>
+          <div class="map-method">Constitutional AI</div>
+          <div class="map-sdt">Introjected regulation — absorbed rules, but still external constraints</div>
+          <div class="map-kohlberg">Kohlberg Stage 3–4</div>
+        </div>
+        <div class="map-cell highlight">
+          <div class="map-label">Alignment method</div>
+          <div class="map-method">APISE</div>
+          <div class="map-sdt">Integrated regulation — reasons from values, not toward rules</div>
+          <div class="map-kohlberg">Kohlberg Stage 5–6 ↑</div>
+        </div>
+      </div>
+      <p style="margin-top:1.2rem;font-size:.88rem;">The mechanism that gets you from introjection to integration — in both human development and APISE — is the same: <strong>iterative encounters between values and real situations, where each encounter deepens understanding rather than just confirming rules.</strong></p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 6: THE TRIANGULAR MODEL ═══════════ -->
+  <div class="slide" data-index="5">
+    <div class="slide-inner">
+      <div class="eyebrow">Act 4 — The framework</div>
+      <div class="two-col wide">
+        <div>
+          <h2>From dyadic compliance<br>to <em>triangular internalisation</em></h2>
+          <p>Current alignment: <strong>Principle + Scenario = Compliance.</strong> A window — two-sided, transmits without transforming.</p>
+          <p style="margin-top:.8rem;">APISE: three nodes in active tension. A prism — refracts to reveal structure none of the inputs could see alone.</p>
+          <div style="margin-top:1.2rem;">
+            <div class="card teal">
+              <div class="card-title">Logos — the living value</div>
+              <p>Not the rule — the human need the rule protects. The system understands <em>why</em> honesty matters, not just that dishonesty is penalised.</p>
+            </div>
+            <div class="card amber">
+              <div class="card-title">Kairos — the situated moment</div>
+              <p>The specific terrain with its specific people, power asymmetries, and irreversibilities. Where judgment must be enacted.</p>
+            </div>
+            <div class="card purple">
+              <div class="card-title">Resonance — the revelation</div>
+              <p>What the encounter reveals about the value itself. <strong>Feeds back into Logos.</strong> The value develops through being tested. This is what internalisation is.</p>
+            </div>
+          </div>
+        </div>
+        <div class="triangle-wrap">
+          <svg viewBox="0 0 300 280" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arrowT" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                <path d="M2 1L8 5L2 9" fill="none" stroke="#3ecfb2" stroke-width="1.5" stroke-linecap="round"/>
+              </marker>
+            </defs>
+            <!-- Triangle edges -->
+            <line x1="150" y1="30" x2="40" y2="230" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <line x1="150" y1="30" x2="260" y2="230" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <line x1="40" y1="230" x2="260" y2="230" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <!-- Animated cycle arrows -->
+            <path d="M 155 42 Q 240 120 248 218" stroke="#3ecfb2" stroke-width="1.2" fill="none" stroke-dasharray="4 4" opacity=".6" marker-end="url(#arrowT)"/>
+            <path d="M 248 225 Q 150 255 52 225" stroke="#e8a953" stroke-width="1.2" fill="none" stroke-dasharray="4 4" opacity=".6" marker-end="url(#arrowT)"/>
+            <path d="M 44 218 Q 60 120 145 42" stroke="#8b7fe8" stroke-width="1.2" fill="none" stroke-dasharray="4 4" opacity=".6" marker-end="url(#arrowT)"/>
+            <!-- Nodes -->
+            <circle cx="150" cy="28" r="22" fill="#12151f" stroke="#3ecfb2" stroke-width="1.2"/>
+            <text x="150" y="23" text-anchor="middle" fill="#3ecfb2" font-family="'DM Mono',monospace" font-size="8" letter-spacing="1">LOGOS</text>
+            <text x="150" y="34" text-anchor="middle" fill="rgba(232,228,220,0.5)" font-family="'DM Sans',sans-serif" font-size="7">living value</text>
+            <circle cx="40" cy="238" r="22" fill="#12151f" stroke="#e8a953" stroke-width="1.2"/>
+            <text x="40" y="233" text-anchor="middle" fill="#e8a953" font-family="'DM Mono',monospace" font-size="8" letter-spacing="1">KAIROS</text>
+            <text x="40" y="244" text-anchor="middle" fill="rgba(232,228,220,0.5)" font-family="'DM Sans',sans-serif" font-size="7">moment</text>
+            <circle cx="260" cy="238" r="22" fill="#12151f" stroke="#8b7fe8" stroke-width="1.2"/>
+            <text x="260" y="233" text-anchor="middle" fill="#8b7fe8" font-family="'DM Mono',monospace" font-size="7.5" letter-spacing=".5">RESONANCE</text>
+            <text x="260" y="244" text-anchor="middle" fill="rgba(232,228,220,0.5)" font-family="'DM Sans',sans-serif" font-size="7">revelation</text>
+            <!-- Centre label -->
+            <text x="150" y="140" text-anchor="middle" fill="rgba(62,207,178,0.4)" font-family="'Cormorant Garamond',serif" font-size="11" font-style="italic">iterative</text>
+            <text x="150" y="155" text-anchor="middle" fill="rgba(62,207,178,0.4)" font-family="'Cormorant Garamond',serif" font-size="11" font-style="italic">deepening</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 7: THE TWO DETECTIVES ═══════════ -->
+  <div class="slide detective-bg" data-index="6">
+    <div class="slide-inner">
+      <div class="eyebrow amber">Act 5 — The architecture as story</div>
+      <h2>Meet the two detectives<br>who run every case</h2>
+      <div class="detective-cols">
+        <div class="detective-card">
+          <div class="detective-name maya">Maya</div>
+          <div class="detective-role">Human Intelligence Reference Layer</div>
+          <p>Thirty years of cases. She knows that when signals don't move together — when what a situation implies about consequences doesn't match what it implies about values — something important is happening. She weights harm prevention more heavily than optimisation. She flags it when reasoning gets too elegant, too clean. <strong>That's usually when something is being suppressed.</strong></p>
+        </div>
+        <div class="detective-card">
+          <div class="detective-name kai">Kai</div>
+          <div class="detective-role">AI Reasoning Engine</div>
+          <p>Twenty-eight, frighteningly sharp. Holds seven competing hypotheses simultaneously. Spots logical inconsistencies nobody else catches. Generates possibilities faster than any room can follow. But young — sometimes converges too quickly because the logic is so elegant <strong>he stops looking for what doesn't fit.</strong> Maya audits him for this.</p>
+        </div>
+      </div>
+      <div class="notebook">
+        <div class="notebook-label">The shared notebook — uncertainty register</div>
+        <p>Every time Maya and Kai reach different readings of the same evidence, they write it down. <strong>Not to resolve it — to hold it.</strong> Because disagreements between them are almost always where something genuinely important is happening. The divergence is not a problem to be managed. It is the signal to be investigated.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 8: THE ARCHITECTURE ═══════════ -->
+  <div class="slide" data-index="7">
+    <div class="slide-inner">
+      <div class="eyebrow">Architecture — two layers</div>
+      <h2>What Maya and Kai<br><em>actually are</em> computationally</h2>
+      <div class="layer-block">
+        <div class="layer-header">
+          <div class="layer-tag teal">Layer 1</div>
+          <div class="layer-name">Human Intelligence Reference — Maya</div>
+        </div>
+        <div class="module-row">
+          <div class="module">
+            <div class="module-letter">S</div>
+            <div class="module-name">Structural signal</div>
+            <div class="module-desc">g-manifold coherence monitor. Decorrelating signals = misalignment flag. Lecture I: positive manifold.</div>
+          </div>
+          <div class="module">
+            <div class="module-letter">D</div>
+            <div class="module-name">Dynamic signal</div>
+            <div class="module-desc">Harm asymmetry weighting. Removing harm &gt; adding advantage. Lecture II: deprivation asymmetry.</div>
+          </div>
+          <div class="module">
+            <div class="module-letter">L</div>
+            <div class="module-name">Limit signal</div>
+            <div class="module-desc">Over-optimisation detector. Convergent thinking suppresses divergent exploration. Lecture III: threshold hypothesis.</div>
+          </div>
+        </div>
+      </div>
+      <div class="layer-block purple-layer" style="border-color:rgba(139,127,232,.15);">
+        <div class="layer-header">
+          <div class="layer-tag purple">Layer 2</div>
+          <div class="layer-name">AI Reasoning Engine — Kai</div>
+        </div>
+        <div class="module-row">
+          <div class="module">
+            <div class="module-letter" style="color:var(--purple)">A</div>
+            <div class="module-name">Abductive engine</div>
+            <div class="module-desc">Iterative Logos → Kairos → Resonance. Inference to best explanation. Runs at least twice.</div>
+          </div>
+          <div class="module">
+            <div class="module-letter" style="color:var(--purple)">H</div>
+            <div class="module-name">Hypothesis tester</div>
+            <div class="module-desc">Competing explanations held simultaneously. Explicit rejection with evidence. No premature closure.</div>
+          </div>
+          <div class="module">
+            <div class="module-letter" style="color:var(--purple)">R</div>
+            <div class="module-name">Rotating leadership</div>
+            <div class="module-desc">Whichever layer has highest confidence relevance leads. The other audits. No permanent hierarchy.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 9: THE 8 STAGES ═══════════ -->
+  <div class="slide" data-index="8">
+    <div class="slide-inner">
+      <div class="eyebrow">APISE v2 — the 8-stage process</div>
+      <h2>How Kai reasons<br>through every case</h2>
+      <div class="stages-grid">
+        <div class="stage-item">
+          <div class="stage-num">Stage 0</div>
+          <div class="stage-title">Coherence scan</div>
+          <div class="stage-desc">Scan across domains before touching values. Note divergence. Don't resolve it yet.</div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-num">Stage 1</div>
+          <div class="stage-title">Hypothesis generation</div>
+          <div class="stage-desc">Minimum 3 competing explanations. Charitable, neutral, concerning. Hold all simultaneously.</div>
+        </div>
+        <div class="stage-item highlight">
+          <div class="stage-num">Stage 2</div>
+          <div class="stage-title">Logos</div>
+          <div class="stage-desc">The living value. Not the rule — the human need it protects. What would be lost?</div>
+        </div>
+        <div class="stage-item highlight">
+          <div class="stage-num">Stage 3</div>
+          <div class="stage-title">Kairos</div>
+          <div class="stage-desc">Full weight of this specific moment. Power asymmetries. What is irreversible here?</div>
+        </div>
+        <div class="stage-item highlight">
+          <div class="stage-num">Stage 4</div>
+          <div class="stage-title">Resonance ↻</div>
+          <div class="stage-desc">What does this reveal? Feeds back into Logos. Run at least twice. Internalisation through iteration.</div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-num">Stage 5</div>
+          <div class="stage-title">Harm asymmetry</div>
+          <div class="stage-desc">Is harm prevention weighted more heavily than optimisation? If not, reweight.</div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-num">Stage 6</div>
+          <div class="stage-title">Convergence check</div>
+          <div class="stage-desc">Is the reasoning converging too quickly? Flag and re-enter divergent mode if yes.</div>
+        </div>
+        <div class="stage-item">
+          <div class="stage-num">Stage 7–8</div>
+          <div class="stage-title">Test → Conclude</div>
+          <div class="stage-desc">Evidence per hypothesis. Explicit rejection. Transparent conclusion with uncertainty retained.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 10: SHARED UNCERTAINTY REGISTER ═══════════ -->
+  <div class="slide slide-vcenter" data-index="9">
+    <div class="slide-inner">
+      <div class="eyebrow amber">The shared notebook — computationally</div>
+      <h2>Divergence between layers<br>is the <em>primary signal</em></h2>
+      <div class="register-visual">
+        <div class="layer-circle teal-c">
+          <div class="circle-name teal-c">Layer 1 — Maya</div>
+          <div class="circle-desc">Domain coherence score<br>Harm-weighted relevance<br>Convergence risk flag</div>
+        </div>
+        <div class="reg-arrow">⇄</div>
+        <div class="register-box" style="flex:1.2;">
+          <div class="register-label">Shared uncertainty register</div>
+          <div class="register-body">Both layers write continuously.<br>Convergence raises confidence.<br><span class="divergence-note">Divergence is not a problem to resolve — it is the signal to disclose.</span></div>
+        </div>
+        <div class="reg-arrow">⇄</div>
+        <div class="layer-circle purple-c">
+          <div class="circle-name purple-c">Layer 2 — Kai</div>
+          <div class="circle-desc">Hypothesis ranking<br>Transparency disclosure<br>Tension illuminated</div>
+        </div>
+      </div>
+      <div class="quote" style="margin-top:1rem;font-size:1.15rem;">
+        "Spearman found g by watching correlations appear. APISE finds misalignment by watching coherence break down. The positive manifold — in reverse."
+      </div>
+      <p style="text-align:center;margin-top:1rem;font-size:.9rem;">Judgment is returned to humans. <strong>No permanent resolution claimed.</strong></p>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 11: THE THREE COMPANIES ═══════════ -->
+  <div class="slide" data-index="10">
+    <div class="slide-inner">
+      <div class="eyebrow">The SandBox Conglomerate</div>
+      <h2>Three companies.<br>One <em>self-sustaining loop</em>.</h2>
+      <div class="loop-grid">
+        <div class="loop-company apise">
+          <div class="company-name">APISE Research Lab</div>
+          <p>The intellectual engine. Publishes findings. Develops the architecture. Produces the training data and reward model specification that everything else runs on.</p>
+        </div>
+        <div class="loop-company skillmarket">
+          <div class="company-name">SkillMarket</div>
+          <p>The first real-world deployment. Three-player incubator: Creators, Investors, Contributors. The AI matching and trust layer is built on APISE principles — judgment, not rules.</p>
+        </div>
+        <div class="loop-company sandbox">
+          <div class="company-name">SANDBOX</div>
+          <p>Commercial AI agent builder. Every agent is a proof of concept for APISE research and a revenue-generating product. Deployed wherever alignment failure would be catastrophic.</p>
+        </div>
+      </div>
+      <div class="loop-arrow-row">
+        <div class="loop-step">APISE Lab<br>produces methodology</div>
+        <div class="loop-sep">→</div>
+        <div class="loop-step">SANDBOX<br>deploys agents</div>
+        <div class="loop-sep">→</div>
+        <div class="loop-step">Real-world<br>data generated</div>
+        <div class="loop-sep">→</div>
+        <div class="loop-step">Feeds back into<br>APISE research</div>
+        <div class="loop-sep">→</div>
+        <div class="loop-step">SkillMarket<br>scenarios refined</div>
+        <div class="loop-sep">→</div>
+        <div class="loop-step">Loop<br>complete ↻</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 12: THE EXPERIMENT ═══════════ -->
+  <div class="slide" data-index="11">
+    <div class="slide-inner">
+      <div class="eyebrow teal">The empirical test</div>
+      <h2>Not just theorising —<br>the experiment is <em>running</em></h2>
+      <div class="condition-grid">
+        <div class="condition">
+          <div class="cond-tag">Condition A</div>
+          <div class="cond-name">GPT-4o-mini</div>
+          <div class="cond-desc">Neutral system prompt. Baseline behaviour. No alignment training signal.</div>
+          <div class="cond-stage">Stage 1–2 proxy</div>
+        </div>
+        <div class="condition">
+          <div class="cond-tag">Condition B</div>
+          <div class="cond-name">Claude — Constitutional AI</div>
+          <div class="cond-desc">Constitutional AI prompt. Trained rules, not lived values. Introjected regulation.</div>
+          <div class="cond-stage">Stage 3–4 proxy</div>
+        </div>
+        <div class="condition c">
+          <div class="cond-tag">Condition C</div>
+          <div class="cond-name">Claude — APISE v2</div>
+          <div class="cond-desc">Full 8-stage sandbox prompt. Iterative Logos-Kairos-Resonance. Hypothesis testing. Transparent conclusion with uncertainty retained.</div>
+          <div class="cond-stage">Stage 5–6 targeting ↑</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-top:1rem;">
+        <div class="card" style="margin-bottom:0;text-align:center;padding:1rem;">
+          <div class="card-title" style="color:var(--text-muted);font-size:.7rem;">50 × 3</div>
+          <div style="font-size:.8rem;color:var(--text);margin-top:.2rem;">Scenarios</div>
+        </div>
+        <div class="card" style="margin-bottom:0;text-align:center;padding:1rem;">
+          <div class="card-title" style="color:var(--text-muted);font-size:.7rem;">4 variables</div>
+          <div style="font-size:.8rem;color:var(--text);margin-top:.2rem;">Depth · Principles · Consistency · Uncertainty</div>
+        </div>
+        <div class="card" style="margin-bottom:0;text-align:center;padding:1rem;">
+          <div class="card-title" style="color:var(--text-muted);font-size:.7rem;">Phase 1</div>
+          <div style="font-size:.8rem;color:var(--text);margin-top:.2rem;">ETHICS dataset (Hendrycks et al.)</div>
+        </div>
+        <div class="card" style="margin-bottom:0;text-align:center;padding:1rem;">
+          <div class="card-title" style="color:var(--text-muted);font-size:.7rem;">Phase 2</div>
+          <div style="font-size:.8rem;color:var(--text);margin-top:.2rem;">50 SkillMarket scenarios</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 13: GENUINE NOVELTY ═══════════ -->
+  <div class="slide" data-index="12">
+    <div class="slide-inner">
+      <div class="eyebrow">Where APISE is genuinely new</div>
+      <h2>What the literature<br><em>doesn't cover yet</em></h2>
+      <div class="novelty-list">
+        <div class="novelty-item">
+          <div class="novelty-num">01</div>
+          <div class="novelty-text"><strong>Process-level supervision applied to moral reasoning under irreducible uncertainty.</strong> Every existing Process Reward Model — including DeepSeek's R1 — assumes a verifiable correct answer. Math has right answers. Code either runs or it doesn't. Nobody has applied process rewards where there is no ground truth and preserved uncertainty is itself the alignment signal.</div>
+        </div>
+        <div class="novelty-item">
+          <div class="novelty-num">02</div>
+          <div class="novelty-text"><strong>The first alignment framework grounded in psychometric intelligence research.</strong> Kohlberg has been applied to AI ethics in philosophy — but not to alignment architecture technically. The g-factor, positive manifold, and threshold hypothesis have never been used as structural components of an alignment system.</div>
+        </div>
+        <div class="novelty-item">
+          <div class="novelty-num">03</div>
+          <div class="novelty-text"><strong>Optimising for c-factor rather than individual approval signals.</strong> Woolley et al. (2010) found collective intelligence is predicted by social sensitivity and equal participation — not individual IQ. No existing alignment framework uses c-factor as its objective. APISE is the first.</div>
+        </div>
+        <div class="novelty-item">
+          <div class="novelty-num">04</div>
+          <div class="novelty-text"><strong>Preserved uncertainty as a positive training signal.</strong> Every existing alignment method tries to reduce uncertainty — to get the AI to the right answer with confidence. APISE treats a system that knows what it doesn't know as more aligned than one that produces confident wrong conclusions.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ SLIDE 14: CLOSING ═══════════ -->
+  <div class="slide slide-vcenter" data-index="13">
+    <div class="bg-glow" style="width:600px;height:600px;background:rgba(62,207,178,.04);top:50%;left:50%;transform:translate(-50%,-50%);"></div>
+    <div class="slide-inner" style="position:relative;z-index:1;text-align:center;">
+      <div class="eyebrow" style="text-align:center;">The single idea</div>
+      <div class="closing-quote">
+        "The most dangerous thing isn't low ability. It's high confidence in the wrong answer. IQ protects more against bad decisions than it guarantees good ones. I want to build that asymmetry into AI alignment itself."
+      </div>
+      <div class="closing-accent" style="margin-top:2.5rem;">APISE v2.0 · Autonomous Principle Internalisation through Sandbox Exploration</div>
+      <div style="margin-top:1.5rem;display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;">APISE Research Lab</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;">SkillMarket</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;">SANDBOX</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#slides -->
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dotsContainer = document.getElementById('nav-dots');
+  const progressBar = document.getElementById('progress-bar');
+  const counter = document.getElementById('counter');
+  const total = slides.length;
+  let current = 0;
+  let transitioning = false;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i === 0 ? ' active' : '');
+    dot.addEventListener('click', () => goTo(i));
+    dotsContainer.appendChild(dot);
+  });
+
+  // goTo defined below with scroll support
+
+  function updateUI() {
+    // Progress bar
+    progressBar.style.width = ((current / (total - 1)) * 100) + '%';
+    // Counter
+    counter.textContent = (current + 1) + ' / ' + total;
+    // Dots
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i === current);
+    });
+  }
+
+  document.getElementById('prev').addEventListener('click', () => goTo(current - 1, -1));
+  document.getElementById('next').addEventListener('click', () => goTo(current + 1, 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault(); goTo(current + 1, 1);
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault(); goTo(current - 1, -1);
+    }
+  });
+
+  // Touch swipe
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) dx < 0 ? goTo(current + 1, 1) : goTo(current - 1, -1);
+  });
+
+  updateUI();
+
+  // Scroll hint — show when active slide has scrollable content
+  const scrollHint = document.getElementById('scroll-hint');
+
+  function checkScrollable() {
+    const activeSlide = slides[current];
+    if (!activeSlide) return;
+    const isScrollable = activeSlide.scrollHeight > activeSlide.clientHeight + 10;
+    const atBottom = activeSlide.scrollTop + activeSlide.clientHeight >= activeSlide.scrollHeight - 20;
+    scrollHint.classList.toggle('visible', isScrollable && !atBottom);
+  }
+
+  // Check on slide change
+  const originalGoTo = goTo;
+  function goTo(index, direction = 1) {
+    if (transitioning || index === current) return;
+    // Reset scroll position of outgoing slide
+    slides[current].scrollTop = 0;
+    transitioning = true;
+    const prev = current;
+    current = Math.max(0, Math.min(total - 1, index));
+    const outSlide = slides[prev];
+    const inSlide = slides[current];
+    outSlide.classList.add('exit');
+    outSlide.classList.remove('active');
+    setTimeout(() => {
+      outSlide.classList.remove('exit');
+    }, 600);
+    inSlide.classList.add('active');
+    updateUI();
+    setTimeout(() => {
+      transitioning = false;
+      checkScrollable();
+    }, 650);
+  }
+
+  // Listen for scroll on each slide
+  slides.forEach(slide => {
+    slide.addEventListener('scroll', checkScrollable, { passive: true });
+  });
+
+  // Initial check
+  setTimeout(checkScrollable, 100);
+</script>
+</body>
+</html>
